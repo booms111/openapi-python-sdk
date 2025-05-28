@@ -3,6 +3,23 @@ from pathlib import Path
 import os
 import multiprocessing
 
+# Ensure the script's directory is in sys.path for module imports
+# This assumes main.py and pipeline_module.py are in the same directory when run.
+try:
+    SCRIPT_DIR = Path(__file__).resolve().parent
+    if str(SCRIPT_DIR) not in sys.path:
+        sys.path.append(str(SCRIPT_DIR))
+        # Optional: Log this change if logging is already configured.
+        # However, logging might not be set up this early.
+        # print(f"Appended to sys.path: {SCRIPT_DIR}") 
+except NameError:
+    # __file__ might not be defined in some environments (e.g. certain notebook contexts directly)
+    # Fallback to CWD in that case, though less reliable if script isn't in CWD.
+    SCRIPT_DIR = Path.cwd()
+    if str(SCRIPT_DIR) not in sys.path:
+        sys.path.append(str(SCRIPT_DIR))
+        # print(f"Appended CWD to sys.path: {SCRIPT_DIR}")
+
 # Set multiprocessing start method for CUDA safety FIRST
 try:
     multiprocessing.set_start_method('spawn', force=True)
