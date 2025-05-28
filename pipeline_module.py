@@ -262,7 +262,7 @@ class Hybrid_VGGT_DUSt3R_Pipeline:
             self.vggt=VGGT().to(self.device)
             if os.path.exists(self.cfg.VGGT_WEIGHTS): self.vggt.load_state_dict(torch.load(self.cfg.VGGT_WEIGHTS,map_location=self.device))
             else: logging.error(f"VGGT weights NOT FOUND: {self.cfg.VGGT_WEIGHTS}")
-            self.vggt=self.vggt.to(dtype=self.model_dtype).eval()
+            self.vggt = self.vggt.to(dtype=torch.float32).eval() # Changed to torch.float32
             if not os.path.exists(self.cfg.DUST3R_WEIGHTS): logging.error(f"DUSt3R weights NOT FOUND: {self.cfg.DUST3R_WEIGHTS}")
         except Exception as e: logging.error(f"Model init failed: {e}"); raise
         self.features:Dict[str,FeatureData]={}; self.scenes:Dict[str,SceneData]={}
@@ -314,7 +314,7 @@ class Hybrid_VGGT_DUSt3R_Pipeline:
         except Exception as e: logging.error(f"Feature extraction {img_path}: {e}"); return None
     def _vggt_initial_pass(self,img_tensors:torch.Tensor,img_ids:List[str])->Tuple[Dict[str,CameraPose],np.ndarray]:
         with torch.no_grad():
-            preds=self.vggt(img_tensors.to(self.device,dtype=self.model_dtype))
+            preds=self.vggt(img_tensors.to(self.device,dtype=torch.float32)) # Changed to torch.float32
             poses_r,pc_r,confs_r=preds['poses'].cpu().numpy(),preds['point_cloud'].cpu().numpy(),preds.get('confidence',torch.ones(preds['point_cloud'].shape[0] if preds['point_cloud'].ndim>1 and preds['point_cloud'].shape[0]>0 else 1,device=self.device)).cpu().numpy()
         pose_d={};
         for i,id_ in enumerate(img_ids): rvc,tvc=poses_r[i,:3],poses_r[i,3:].reshape(3,1); Rmat,_=cv2.Rodrigues(rvc); pose_d[id_]=CameraPose(id_,Rmat,tvc,i==0)
