@@ -1,25 +1,27 @@
 import sys
 from pathlib import Path
 import os
+import multiprocessing
+
+# Set multiprocessing start method for CUDA safety FIRST
+try:
+    multiprocessing.set_start_method('spawn', force=True)
+except RuntimeError:
+    # In some environments, it might already be set or not allowed to be forced.
+    # Pass silently or add a print statement if logging is not yet available.
+    print("Warning: Could not force multiprocessing start method to 'spawn'.", file=sys.stderr)
+
 import torch # For torch.cuda.is_available() and version
-from dataclasses import dataclass, field, asdict # For HybridConfig
-from typing import List, Optional, Tuple, Dict, Set, Any # Added for HybridConfig type hints, and general use
-import numpy as np # Added for HybridConfig type hints
 import logging # For configuring logging in main
 import pandas as pd # For reading potential ground truth
-import multiprocessing # For global worker initialization in pipeline module
+import numpy as np # Added for HybridConfig type hints
+from dataclasses import dataclass, field, asdict # For HybridConfig
+from typing import List, Optional, Tuple, Dict, Set, Any # Added for HybridConfig type hints, and general use
 
 # Configure logging for the main script as well
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.info("Main script logging configured.")
-
-# Set multiprocessing start method for CUDA safety
-if __name__ == '__main__': # Ensure this runs only when script is executed directly
-    try:
-        multiprocessing.set_start_method('spawn', force=True)
-        logging.info("Set multiprocessing start method to 'spawn'.")
-    except RuntimeError as e:
-        logging.warning(f"Could not set multiprocessing start method to 'spawn': {e}. This might be an issue if using CUDA with multiprocessing.")
+logging.info("Multiprocessing start method set to 'spawn' (or attempted).") # Log after basicConfig
 
 # --- PyTorch and CUDA Check ---
 logging.info(f"PyTorch version: {torch.version}")
