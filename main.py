@@ -14,9 +14,10 @@ except RuntimeError:
 import torch # For torch.cuda.is_available() and version
 import logging # For configuring logging in main
 import pandas as pd # For reading potential ground truth
-import numpy as np # Added for HybridConfig type hints
-from dataclasses import dataclass, field, asdict # For HybridConfig
-from typing import List, Optional, Tuple, Dict, Set, Any # Added for HybridConfig type hints, and general use
+import numpy as np # Retained, though HybridConfig (which uses it) is now in pipeline_module
+from dataclasses import asdict # For logging asdict(cfg)
+from typing import List, Optional, Tuple, Dict, Set, Any # Retained for general use
+from pipeline_module import HybridConfig # For instantiating cfg
 
 # Configure logging for the main script as well
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -46,77 +47,9 @@ DUST3R_DATASET_ROOT_MOUNT = "/kaggle/input/dust3r"
 
 # --- Define HybridConfig Dataclass in main ---
 # This will be imported by pipeline_module.py via "from main import HybridConfig"
-@dataclass
-class HybridConfig:
-    # Essential paths (ensure these are correct for your setup)
-    # These are defaults for Kaggle competition environment
-    IMAGE_DIR: str = "/kaggle/input/image-matching-challenge-2025/test" # For final submission
-    OUTPUT_DIR: str = "/kaggle/working/output"
-    DATASET_NAME: str = "imc2025_submission" # Used in the 'dataset' column of submission.csv
+# HYBRIDCONFIG DATACLASS HAS BEEN MOVED TO PIPELINE_MODULE.PY
 
-    # Model weights paths (pointing to files within your Kaggle datasets)
-    # CORRECTED based on the 'ls -R' output for the model.pt and .pth files
-    VGGT_WEIGHTS: str = os.path.join(VGGT_DATASET_ROOT_MOUNT, "transformers", "default", "1", "model.pt")
-    DUST3R_WEIGHTS: str = os.path.join(DUST3R_DATASET_ROOT_MOUNT, "transformers", "default", "1", "DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth")
-
-    INTRINSICS_FILE: Optional[str] = None # Path to a JSON file with per-image intrinsics
-
-    # Processing parameters
-    # Adjust MAX_WORKERS based on CPU cores, ensuring at least 1, and leaving some for system.
-    # Note: os.cpu_count() can be None on some systems, so handle that.
-    MAX_WORKERS: int = min(4, (os.cpu_count() or 1) - 1 if (os.cpu_count() or 0) > 1 else 1)
-    DEVICE: str = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    MAX_IMAGE_SIZE: Tuple[int, int] = (1024, 1024)
-    BATCH_SIZE: int = 8 # For model inference batching
-
-    # Default camera intrinsics
-    DEFAULT_FX: float = 1000.0
-    DEFAULT_FY: float = 1000.0
-    DEFAULT_CX: float = 500.0
-    DEFAULT_CY: float = 500.0
-    DEFAULT_CAMERA_INTRINSICS: np.ndarray = field(
-        default_factory=lambda: np.array([
-            [HybridConfig.DEFAULT_FX, 0, HybridConfig.DEFAULT_CX],
-            [0, HybridConfig.DEFAULT_FY, HybridConfig.DEFAULT_CY],
-            [0, 0, 1]
-        ], dtype=np.float32)
-    )
-
-    # SIFT parameters (will be passed to cv2.SIFT_create)
-    nfeatures: int = 0 # Number of best features to retain (0 means all)
-    nOctaveLayers: int = 3 # Number of layers in each octave
-    contrastThreshold: float = 0.04 # Contrast threshold used to filter out weak features
-    edgeThreshold: float = 10.0 # Edge threshold used to filter out edge-like features
-    sigma: float = 1.6 # Sigma of the Gaussian applied to the input image at the 0-th octave
-
-    min_sift_matches: int = 15 # Minimum number of SIFT matches required for a valid pair
-
-    # RANSAC parameters for pose estimation
-    ransac_threshold_px: float = 0.7 # RANSAC threshold in pixels for `cv2.findEssentialMat`
-    ransac_confidence: float = 0.999 # RANSAC confidence for `cv2.findEssentialMat`
-
-    # Algorithm-specific thresholds and parameters
-    MIN_IMAGES_PER_SCENE: int = 3 # Minimum images for a cluster to be considered a scene
-    OUTLIER_THRESHOLD: float = 10.0 # For BA outlier rejection (reprojection error in pixels)
-    BA_LOSS: str = 'cauchy' # Loss function for Bundle Adjustment ('linear', 'soft_l1', 'huber', 'cauchy', 'arctan')
-    BA_F_SCALE: float = 0.5 # Scale factor for loss function
-    BA_MAX_NFEV: int = 300 # Maximum number of function evaluations for BA
-    BA_VERBOSE: int = 0 # Verbosity level for BA (0-2)
-    BA_FIX_FIRST_N_CAMERAS: int = 1 # Number of cameras to fix during BA (e.g., first camera)
-    BA_RESIDUAL_THRESHOLD: float = 5.0 # Max mean residual for BA success (pixels)
-    DUST3R_CONFIDENCE_THRESHOLD: float = 0.7 # Minimum confidence for a DUSt3R match to be used
-    DUST3R_PAIR_THRESHOLD: float = 7.0 # Max spatial distance between cameras to consider for DUSt3R pairing (meters)
-    SCENE_EPSILON: float = 0.25 # DBSCAN clustering threshold for scene formation (based on relative pose distance/similarity)
-
-    # Visualization and output
-    VERBOSE: bool = True # Enable verbose logging
-    VALIDATE: bool = False # Set to True only if validating with ground truth (requires train_labels.csv)
-    VISUALIZE: bool = False # Set to True for debug plots, False for submission
-    MESHLAB_FILTERS: List[str] = field(default_factory=lambda: ["Simplification: Quadric Edge Collapse Decimation", "Laplacian Smooth"])
-    MESHLAB_TARGET_FACES: int = 5000 # Target faces for MeshLab simplification
-    GSPLAT_RENDER_SIZE: Tuple[int, int] = (1024, 1024) # Resolution for Gaussian Splatting renders
-
-logging.info("HybridConfig dataclass defined.")
+# logging.info("HybridConfig dataclass defined.") # Commented out as it's moved
 
 # --- Path Setup ---
 # Assume pipeline_module.py will be in /kaggle/input/pipeline or current working directory

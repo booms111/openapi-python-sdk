@@ -22,56 +22,81 @@ from sklearn.cluster import DBSCAN as SklearnDBSCAN # For scene clustering
 # Configure logging for the pipeline module
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- Import Configuration from Notebook's Main Scope ---
-try:
-    from main import HybridConfig
-    logging.info("Pipeline_module.py: Successfully imported HybridConfig from main.")
-except ImportError:
-    logging.error("Pipeline_module.py: Could not import HybridConfig from main.")
-    logging.error("Using a fallback HybridConfig definition. Ensure HybridConfig in main is correct.")
-    # Fallback definition for standalone testing of pipeline_module.py (less likely in Kaggle)
-    @dataclass
-    class HybridConfig:
-        IMAGE_DIR: str = "fallback_test_data"
-        OUTPUT_DIR: str = "fallback_output"
-        DEVICE: str = 'cpu'
-        nfeatures: int = 0
-        nOctaveLayers: int = 3
-        contrastThreshold: float = .04 # MODIFIED
-        edgeThreshold: float = 10.0
-        sigma: float = 1.6
-        min_sift_matches: int = 15
-        VGGT_WEIGHTS: str = "dummy_vggt.pth"
-        DUST3R_WEIGHTS: str = "dummy_dust3r.pth"
-        VISUALIZE: bool = False
-        ransac_threshold_px: float = .5 # MODIFIED
-        ransac_confidence: float = .999 # MODIFIED
-        MAX_WORKERS: int = 1
-        BATCH_SIZE: int = 1
-        DEFAULT_FX: float = 1000.0
-        DEFAULT_FY: float = 1000.0
-        DEFAULT_CX: float = 512.0
-        DEFAULT_CY: float = 384.0
-        DEFAULT_CAMERA_INTRINSICS: np.ndarray = field(default_factory=lambda:np.array([[1000.0,0,512.0],[0,1000.0,384.0],[0,0,1]],dtype=np.float32))
-        MIN_IMAGES_PER_SCENE: int = 3
-        OUTLIER_THRESHOLD: float = 10.0
-        BA_LOSS: str = 'huber'
-        BA_F_SCALE: float = .5 # MODIFIED
-        BA_MAX_NFEV: int = 100
-        BA_VERBOSE: int = 0
-        BA_FIX_FIRST_N_CAMERAS: int = 1
-        BA_RESIDUAL_THRESHOLD: float = 7.0
-        DUST3R_CONFIDENCE_THRESHOLD: float = .6 # MODIFIED
-        DUST3R_PAIR_THRESHOLD: float = 7.0
-        SCENE_EPSILON: float = .30 # MODIFIED (e.g., .25 instead of 0.25)
-        VERBOSE: bool = True
-        VALIDATE: bool = False
-        MESHLAB_FILTERS: List[str] = field(default_factory=lambda:["Simplification: Quadric Edge Collapse Decimation","Laplacian Smooth"])
-        MESHLAB_TARGET_FACES: int = 15000
-        GSPLAT_RENDER_SIZE: Tuple[int,int]=(800,600)
-        DATASET_NAME: str = "dummy_dataset"
-        INTRINSICS_FILE: Optional[str] = None
+# --- Global Variables for Paths (used in HybridConfig defaults) ---
+# These need to be defined before HybridConfig if HybridConfig uses them as defaults.
+# In the original main.py, VGGT_DATASET_ROOT_MOUNT and DUST3R_DATASET_ROOT_MOUNT were global.
+VGGT_DATASET_ROOT_MOUNT = "/kaggle/input/vggt" # Assuming this path is available
+DUST3R_DATASET_ROOT_MOUNT = "/kaggle/input/dust3r" # Assuming this path is available
 
+@dataclass
+class HybridConfig:
+    # Essential paths (ensure these are correct for your setup)
+    # These are defaults for Kaggle competition environment
+    IMAGE_DIR: str = "/kaggle/input/image-matching-challenge-2025/test" # For final submission
+    OUTPUT_DIR: str = "/kaggle/working/output"
+    DATASET_NAME: str = "imc2025_submission" # Used in the 'dataset' column of submission.csv
+
+    # Model weights paths (pointing to files within your Kaggle datasets)
+    # CORRECTED based on the 'ls -R' output for the model.pt and .pth files
+    VGGT_WEIGHTS: str = os.path.join(VGGT_DATASET_ROOT_MOUNT, "transformers", "default", "1", "model.pt")
+    DUST3R_WEIGHTS: str = os.path.join(DUST3R_DATASET_ROOT_MOUNT, "transformers", "default", "1", "DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth")
+
+    INTRINSICS_FILE: Optional[str] = None # Path to a JSON file with per-image intrinsics
+
+    # Processing parameters
+    # Adjust MAX_WORKERS based on CPU cores, ensuring at least 1, and leaving some for system.
+    # Note: os.cpu_count() can be None on some systems, so handle that.
+    MAX_WORKERS: int = min(4, (os.cpu_count() or 1) - 1 if (os.cpu_count() or 0) > 1 else 1)
+    DEVICE: str = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    MAX_IMAGE_SIZE: Tuple[int, int] = (1024, 1024)
+    BATCH_SIZE: int = 8 # For model inference batching
+
+    # Default camera intrinsics
+    DEFAULT_FX: float = 1000.0
+    DEFAULT_FY: float = 1000.0
+    DEFAULT_CX: float = 500.0
+    DEFAULT_CY: float = 500.0
+    DEFAULT_CAMERA_INTRINSICS: np.ndarray = field(
+        default_factory=lambda: np.array([
+            [HybridConfig.DEFAULT_FX, 0, HybridConfig.DEFAULT_CX],
+            [0, HybridConfig.DEFAULT_FY, HybridConfig.DEFAULT_CY],
+            [0, 0, 1]
+        ], dtype=np.float32)
+    )
+
+    # SIFT parameters (will be passed to cv2.SIFT_create)
+    nfeatures: int = 0 # Number of best features to retain (0 means all)
+    nOctaveLayers: int = 3 # Number of layers in each octave
+    contrastThreshold: float = 0.04 # Contrast threshold used to filter out weak features
+    edgeThreshold: float = 10.0 # Edge threshold used to filter out edge-like features
+    sigma: float = 1.6 # Sigma of the Gaussian applied to the input image at the 0-th octave
+
+    min_sift_matches: int = 15 # Minimum number of SIFT matches required for a valid pair
+
+    # RANSAC parameters for pose estimation
+    ransac_threshold_px: float = 0.7 # RANSAC threshold in pixels for `cv2.findEssentialMat`
+    ransac_confidence: float = 0.999 # RANSAC confidence for `cv2.findEssentialMat`
+
+    # Algorithm-specific thresholds and parameters
+    MIN_IMAGES_PER_SCENE: int = 3 # Minimum images for a cluster to be considered a scene
+    OUTLIER_THRESHOLD: float = 10.0 # For BA outlier rejection (reprojection error in pixels)
+    BA_LOSS: str = 'cauchy' # Loss function for Bundle Adjustment ('linear', 'soft_l1', 'huber', 'cauchy', 'arctan')
+    BA_F_SCALE: float = 0.5 # Scale factor for loss function
+    BA_MAX_NFEV: int = 300 # Maximum number of function evaluations for BA
+    BA_VERBOSE: int = 0 # Verbosity level for BA (0-2)
+    BA_FIX_FIRST_N_CAMERAS: int = 1 # Number of cameras to fix during BA (e.g., first camera)
+    BA_RESIDUAL_THRESHOLD: float = 5.0 # Max mean residual for BA success (pixels)
+    DUST3R_CONFIDENCE_THRESHOLD: float = 0.7 # Minimum confidence for a DUSt3R match to be used
+    DUST3R_PAIR_THRESHOLD: float = 7.0 # Max spatial distance between cameras to consider for DUSt3R pairing (meters)
+    SCENE_EPSILON: float = 0.25 # DBSCAN clustering threshold for scene formation (based on relative pose distance/similarity)
+
+    # Visualization and output
+    VERBOSE: bool = True # Enable verbose logging
+    VALIDATE: bool = False # Set to True only if validating with ground truth (requires train_labels.csv)
+    VISUALIZE: bool = False # Set to True for debug plots, False for submission
+    MESHLAB_FILTERS: List[str] = field(default_factory=lambda: ["Simplification: Quadric Edge Collapse Decimation", "Laplacian Smooth"])
+    MESHLAB_TARGET_FACES: int = 5000 # Target faces for MeshLab simplification
+    GSPLAT_RENDER_SIZE: Tuple[int, int] = (1024, 1024) # Resolution for Gaussian Splatting renders
 
 # --- Define Dataclasses for Data Structures ---
 @dataclass
