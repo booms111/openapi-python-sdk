@@ -289,9 +289,27 @@ class Hybrid_VGGT_DUSt3R_Pipeline:
                 sc=min(self.cfg.MAX_IMAGE_SIZE[1]/Ho,self.cfg.MAX_IMAGE_SIZE[0]/Wo)
                 img_t=cv2.resize(img,None,fx=sc,fy=sc,interpolation=cv2.INTER_AREA)
             Hp,Wp=img_t.shape[:2]; img_rgb_p=cv2.cvtColor(img_t,cv2.COLOR_BGR2RGB)
+
+            # Padding logic to make dimensions multiples of PATCH_SIZE (e.g., 14 for VGGT)
+            PATCH_SIZE = 14 # Define the patch size requirement
+
+            pad_h_bottom = (PATCH_SIZE - (Hp % PATCH_SIZE)) % PATCH_SIZE
+            pad_w_right = (PATCH_SIZE - (Wp % PATCH_SIZE)) % PATCH_SIZE
+
+            if pad_h_bottom > 0 or pad_w_right > 0:
+                # Pad with black (0,0,0). BORDER_CONSTANT is used.
+                # img_rgb_p is already in RGB format here.
+                img_rgb_p = cv2.copyMakeBorder(img_rgb_p, 0, pad_h_bottom, 0, pad_w_right, cv2.BORDER_CONSTANT, value=[0,0,0])
+                Hp, Wp = img_rgb_p.shape[:2] # Update Hp, Wp after padding
+                logging.info(f"Image {img_id} padded to {Hp}x{Wp} to be divisible by {PATCH_SIZE}")
+            
             Ko=self._get_intrinsics(img_id,(Ho,Wo)); Ks=Ko.copy()
             if sc!=1.0: Ks[0,0]*=sc; Ks[1,1]*=sc; Ks[0,2]*=sc; Ks[1,2]*=sc # MODIFIED .0
-            img_store=(img_rgb_p/255.0).astype(np.float32); img_rgb_samp=img_rgb_p if self.cfg.VISUALIZE else None # MODIFIED .0
+            # img_store uses the (potentially padded) img_rgb_p
+            img_store=(img_rgb_p/255.0).astype(np.float32); 
+            # img_rgb_samp also uses the (potentially padded) img_rgb_p for visualization purposes
+            img_rgb_samp=img_rgb_p if self.cfg.VISUALIZE else None 
+            # FeatureData.image_shape uses the (potentially padded) Hp, Wp
             return FeatureData(img_id,img_store,(Hp,Wp),Ks,img_rgb_samp)
         except Exception as e: logging.error(f"Feature extraction {img_path}: {e}"); return None
     def _vggt_initial_pass(self,img_tensors:torch.Tensor,img_ids:List[str])->Tuple[Dict[str,CameraPose],np.ndarray]:
