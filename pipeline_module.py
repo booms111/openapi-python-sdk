@@ -314,13 +314,31 @@ class Hybrid_VGGT_DUSt3R_Pipeline:
         except Exception as e: logging.error(f"Feature extraction {img_path}: {e}"); return None
     def _vggt_initial_pass(self,img_tensors:torch.Tensor,img_ids:List[str])->Tuple[Dict[str,CameraPose],np.ndarray]:
         with torch.no_grad():
-            preds=self.vggt(img_tensors.to(self.device,dtype=torch.float32)) # Changed to torch.float32
-            poses_r,pc_r,confs_r=preds['poses'].cpu().numpy(),preds['point_cloud'].cpu().numpy(),preds.get('confidence',torch.ones(preds['point_cloud'].shape[0] if preds['point_cloud'].ndim>1 and preds['point_cloud'].shape[0]>0 else 1,device=self.device)).cpu().numpy()
+            preds=self.vggt(img_tensors.to(self.device,dtype=torch.float32)) 
+            # VGGT returns 'pose_enc' (B, S, 9). Assuming first 6 elements are rvec, tvec for now.
+            # This assumption may need validation based on VGGT's exact pose_enc structure.
+            poses_r = preds['pose_enc'].cpu().numpy()
+            pc_r = preds['world_points'].cpu().numpy()
+            # Ensure point_cloud_raw (pc_r) is used for shape in default torch.ones
+            confs_r = preds.get('world_points_conf', torch.ones(pc_r.shape[0] if pc_r.ndim == 2 and pc_r.shape[0] > 0 else 1, device=self.device)).cpu().numpy()
         pose_d={};
-        for i,id_ in enumerate(img_ids): rvc,tvc=poses_r[i,:3],poses_r[i,3:].reshape(3,1); Rmat,_=cv2.Rodrigues(rvc); pose_d[id_]=CameraPose(id_,Rmat,tvc,i==0)
+        # Assuming poses_r is (Batch, Num_images_per_sample, 9) or similar, and we need the first image's pose.
+        # If VGGT's 'pose_enc' provides multiple poses per input sample (e.g. for pairs),
+        # this logic might need adjustment to correctly select poses for each image in img_ids.
+        # For now, assuming poses_r[i] corresponds to img_ids[i] and contains at least 6 elements for rvec, tvec.
+        for i,id_ in enumerate(img_ids): 
+            # If poses_r is (B, S, 9), and S is num_images (e.g. 1 for single image processing by VGGT, or >1 if it handles sequences)
+            # Assuming S=1 for simplicity here, so poses_r[i] is the encoding for img_ids[i]
+            # If VGGT processes single images and returns (B, 9) directly:
+            # current_pose_data = poses_r[i] 
+            # If VGGT processes sequences/pairs and returns (B,S,9) and S corresponds to images in batch:
+            current_pose_data = poses_r[i, 0, :] # Example: take the first pose from sequence S for image i
+            
+            rvc,tvc=current_pose_data[:3],current_pose_data[3:6].reshape(3,1); Rmat,_=cv2.Rodrigues(rvc); pose_d[id_]=CameraPose(id_,Rmat,tvc,i==0)
         pts_f=np.array([])
-        if confs_r.size>0 and pc_r.size>0 and pc_r.ndim==2:
-            mask=confs_r > .5; fil_pts = pc_r[mask] if mask.sum()>0 and pc_r.shape[0]==mask.shape[0] else pc_r # MODIFIED .5
+        if confs_r.size>0 and pc_r.size>0 and pc_r.ndim==2: # pc_r is now from 'world_points'
+            # Using confs_r (from 'world_points_conf') for mask
+            mask=confs_r > 0.5; fil_pts = pc_r[mask] if mask.sum()>0 and pc_r.shape[0]==mask.shape[0] else pc_r 
             pts_f=fil_pts[:500]
         elif pc_r.size>0 and pc_r.ndim==2: pts_f=pc_r[:500]
         return pose_d,pts_f
