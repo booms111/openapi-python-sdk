@@ -13,6 +13,14 @@ import multiprocessing # For global worker initialization in pipeline module
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.info("Main script logging configured.")
 
+# Set multiprocessing start method for CUDA safety
+if __name__ == '__main__': # Ensure this runs only when script is executed directly
+    try:
+        multiprocessing.set_start_method('spawn', force=True)
+        logging.info("Set multiprocessing start method to 'spawn'.")
+    except RuntimeError as e:
+        logging.warning(f"Could not set multiprocessing start method to 'spawn': {e}. This might be an issue if using CUDA with multiprocessing.")
+
 # --- PyTorch and CUDA Check ---
 logging.info(f"PyTorch version: {torch.version}")
 logging.info(f"CUDA available: {torch.cuda.is_available()}")
