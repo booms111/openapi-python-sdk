@@ -616,7 +616,7 @@ class Hybrid_VGGT_DUSt3R_Pipeline:
             if all_ids:
                 for i in range(0,len(all_ids),self.cfg.BATCH_SIZE):
                     b_ids=all_ids[i:i+self.cfg.BATCH_SIZE]
-                    b_tens=torch.cat([torch.from_numpy(self.features[id_].image_tensor).permute(2,0,1).unsqueeze(0) for id_ in b_ids],dim=0).float()
+                    b_tens=torch.cat([torch.from_numpy(self.features[id_].image_tensor).permute(2,0,1).unsqueeze(0) for id_ in b_ids],dim=0)
                     p_batch,pts_batch=self._vggt_initial_pass(b_tens,b_ids)
                     init_poses.update(p_batch)
                     if init_pts.size==0 and pts_batch.size>0: init_pts=pts_batch
