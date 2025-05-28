@@ -562,7 +562,7 @@ class Hybrid_VGGT_DUSt3R_Pipeline:
         sc_dirs=sorted([d for d in os.listdir(root_dir) if os.path.isdir(os.path.join(root_dir,d))])
         if not sc_dirs: logging.error(f"No scenes in {root_dir}"); return None
         for sc_name in sc_dirs:
-            img_dir=os.path.join(root_dir,sc_name,'images'); self.features={}; self.scenes={}
+            img_dir=os.path.join(root_dir,sc_name); self.features={}; self.scenes={} # MODIFIED LINE
             if not os.path.isdir(img_dir): logging.warning(f"No images dir: {img_dir}"); continue
             paths=[os.path.join(img_dir,f) for f in sorted(os.listdir(img_dir)) if f.lower().endswith(('.png','.jpg','.jpeg'))]
             if not paths: logging.warning(f"No images in {img_dir}"); continue
