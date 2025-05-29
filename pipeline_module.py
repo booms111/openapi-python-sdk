@@ -332,7 +332,7 @@ class Hybrid_VGGT_DUSt3R_Pipeline:
             # If VGGT processes single images and returns (B, 9) directly:
             # current_pose_data = poses_r[i] 
             # If VGGT processes sequences/pairs and returns (B,S,9) and S corresponds to images in batch:
-            current_pose_data = poses_r[i, 0, :] # Example: take the first pose from sequence S for image i
+            current_pose_data = poses_r[0, i, :] # Changed indexing from [i, 0, :] to [0, i, :]
             
             rvc,tvc=current_pose_data[:3],current_pose_data[3:6].reshape(3,1); Rmat,_=cv2.Rodrigues(rvc); pose_d[id_]=CameraPose(id_,Rmat,tvc,i==0)
         pts_f=np.array([])
